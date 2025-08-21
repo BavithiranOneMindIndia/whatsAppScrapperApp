@@ -147,7 +147,7 @@ app.get("/sessions", (req, res) => {
         }
       }
     }
-  } catch (_) {}
+  } catch (_) { }
 
   // Add all in-memory sessions
   const mem = Object.keys(sessions).map((id) => ({
@@ -228,6 +228,45 @@ app.get("/session/:id/result", (req, res) => {
     exists,
     file: exists ? `/sessions/${encodeURIComponent(id)}/groups_participants.xlsx` : null
   });
+});
+
+app.post("/unique-participants", async (req, res) => {
+  try {
+    const allParticipants = new Set();
+
+    const sessionDirs = fs.readdirSync(SESSIONS_DIR, { withFileTypes: true })
+      .filter(d => d.isDirectory())
+      .map(d => path.join(SESSIONS_DIR, d.name));
+
+    for (const folder of sessionDirs) {
+      const filePath = path.join(folder, "groups_participants.xlsx");
+      if (!fs.existsSync(filePath)) continue;
+
+      const wb = XLSX.readFile(filePath);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws);
+
+      for (const row of rows) {
+        if (!row.Participants) continue;
+        const parts = row.Participants.split(',').map(p => p.trim()).filter(p => p);
+        parts.forEach(p => allParticipants.add(p));
+      }
+    }
+
+    // Save result
+    const resultRows = Array.from(allParticipants).map(p => ({ Participant: p }));
+    const wsOut = XLSX.utils.json_to_sheet(resultRows);
+    const wbOut = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wbOut, wsOut, "UniqueParticipants");
+
+    const outFile = path.join(SESSIONS_DIR, "unique_participants.xlsx");
+    XLSX.writeFile(wbOut, outFile);
+
+    res.json({ status: "success", count: allParticipants.size, file: `/sessions/unique_participants.xlsx` });
+  } catch (err) {
+    console.error("❌ Error generating unique participants:", err);
+    res.status(500).json({ error: "Failed to generate unique participants" });
+  }
 });
 
 // Start server
