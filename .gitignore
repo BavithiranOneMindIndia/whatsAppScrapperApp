@@ -1,0 +1,54 @@
+# Node modules
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Electron / cache / build files
+dist/
+out/
+*.asar
+*.zip
+*.exe
+
+# VSCode files
+.vscode/
+.history/
+*.code-workspace
+
+# Sessions & cache
+sessions/
+sessions_auth/
+.wwebjs_cache/
+
+# NPM package lock (optional, depends on your workflow)
+# package-lock.json
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Debug
+.debug/
+
+# Yarn
+.yarn/*
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+
+# Optional OS specific
+*.swp

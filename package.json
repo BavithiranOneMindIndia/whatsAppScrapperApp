@@ -1,0 +1,21 @@
+{
+  "name": "whatsapp-bot-desktop",
+  "version": "1.0.0",
+  "description": "WhatsApp bot desktop app using Electron + whatsapp-web.js",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "puppeteer": "^24.16.2",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.32.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^37.3.1"
+  }
+}
