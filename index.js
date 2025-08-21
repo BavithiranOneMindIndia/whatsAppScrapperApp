@@ -31,7 +31,13 @@ const customChrome = path.join(ROOT, "chrome", "win64-139.0.7258.68", "chrome-wi
 const hasCustomChrome = fs.existsSync(customChrome);
 
 function puppeteerOptions() {
-  const base = { headless: false, args: ["--start-maximized"] };
+  const base = {
+    headless: false, args: ["--start-maximized", "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-gpu",
+      "--disable-dev-shm-usage",
+      "--disable-software-rasterizer"]
+  };
   return hasCustomChrome ? { ...base, executablePath: customChrome } : base;
 }
 
