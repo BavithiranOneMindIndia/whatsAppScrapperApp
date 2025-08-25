@@ -68,9 +68,24 @@ app.get('/debug/routes', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Optional custom Chrome (Windows packaged)
-const customChromeWin = path.join(process.resourcesPath || ROOT, "chrome", "win64-139.0.7258.138", "chrome-win64", "chrome.exe");
-const hasCustomChrome = process.platform === 'win32' && fs.existsSync(customChromeWin);
+// ---- Custom Chrome (robust detection) ----
+const CHROME_REL = ["chrome", "win64-139.0.7258.138", "chrome-win64", "chrome.exe"];
+
+function findCustomChrome() {
+  const candidates = [
+    path.join(process.resourcesPath || __dirname, ...CHROME_REL),                   // correct (resources\chrome\…)
+    path.join(process.resourcesPath || __dirname, "resources", ...CHROME_REL),      // if extraResources accidentally nested
+    path.join(__dirname, "resources", ...CHROME_REL),                               // dev or unpacked next to code
+    path.join(__dirname, "..", "resources", ...CHROME_REL)                          // some packagers
+  ];
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch { }
+  }
+  return null;
+}
+
+const customChromePath = process.platform === "win32" ? findCustomChrome() : null;
+console.log("🔍 Custom Chrome resolved:", customChromePath || "(none)");
 
 function puppeteerOptions() {
   const base = {
@@ -83,7 +98,12 @@ function puppeteerOptions() {
       "--disable-software-rasterizer"
     ]
   };
-  return hasCustomChrome ? { ...base, executablePath: customChromeWin } : base;
+  if (customChromePath) {
+    // Force puppeteer-core to use our binary
+    process.env.PUPPETEER_EXECUTABLE_PATH = customChromePath;
+    return { ...base, executablePath: customChromePath };
+  }
+  return base;
 }
 
 // Create a WhatsApp session

@@ -37,7 +37,10 @@ function createWindow() {
 
   waitForBackendReady().then(() => {
     mainWindow.loadFile(path.join(__dirname, 'ui', 'index.html'));
-    if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
+    if (isDev && process.env.DEBUG_TOOLS === '1') {
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
+
   });
 }
 

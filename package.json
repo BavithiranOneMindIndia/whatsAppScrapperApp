@@ -1,23 +1,76 @@
 {
   "name": "whatsapp-exporter",
   "version": "1.0.0",
-  "description": "WhatsApp Multi-Session Exporter (Electron + Node + whatsapp-web.js)",
+  "description": "WhatsApp Multi-Session Exporter",
   "main": "main.js",
-  "type": "commonjs",
+  "author": "Your Name",
+  "license": "MIT",
   "scripts": {
     "dev": "electron .",
-    "pack:win": "electron-packager . whatsapp-exporter --platform=win32 --arch=x64 --out=dist --overwrite --prune=true --icon=assets/icon.ico"
+    "dist": "electron-builder",
+    "dist:installer": "electron-builder --win nsis",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "electron-store": "^9.0.0",
     "express": "^4.19.2",
     "qrcode": "^1.5.3",
     "whatsapp-web.js": "^1.26.0",
     "xlsx": "^0.18.5"
   },
-  "devDependencies": {
-    "electron": "^30.0.0",
-    "electron-packager": "^17.1.2"
+  "build": {
+    "appId": "com.yourcompany.whatsappexporter",
+    "productName": "WhatsApp Exporter",
+    "asar": true,
+    "files": [
+      "main.js",
+      "index.js",
+      "ui/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/",
+        "to": ".",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "WhatsApp Exporter",
+      "deleteAppDataOnUninstall": false
+    }
   }
 }
