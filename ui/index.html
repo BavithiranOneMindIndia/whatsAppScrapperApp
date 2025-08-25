@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <title>WhatsApp Multi-Session Exporter</title>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: http://localhost:3000;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: http://127.0.0.1:3000;">
   <style>
     body {
       font-family: system-ui, Arial, sans-serif;
@@ -118,7 +118,6 @@
       color: #ff6b6b;
     }
 
-    /* Loader CSS */
     .loader {
       border: 3px solid #f3f3f3;
       border-top: 3px solid #1b63ff;
@@ -154,6 +153,7 @@
     <div class="tab" data-target="list">Sessions</div>
     <div class="tab" data-target="results">Results</div>
     <div class="tab" data-target="unique">Unique Participants</div>
+    <div class="tab" data-target="settings">Settings</div>
   </div>
 
   <!-- Add Session -->
@@ -170,8 +170,7 @@
 
     <div class="card">
       <h3>Scan QR</h3>
-      <div class="muted">After creating/loading a session, poll for QR until it shows. Once scanned, it will say
-        “authenticated”.</div>
+      <div class="muted">After creating/loading a session, this will keep polling until authenticated.</div>
       <div style="margin-top:12px;">
         <button id="btnShowQr">Show QR</button>
       </div>
@@ -219,6 +218,7 @@
     </div>
   </section>
 
+  <!-- Unique Participants -->
   <section id="unique" class="page">
     <div class="card">
       <h3>Generate Unique Participants</h3>
@@ -229,10 +229,25 @@
     </div>
   </section>
 
-  <script>
-    const API = "http://localhost:3000";
+  <!-- Settings -->
+  <section id="settings" class="page">
+    <div class="card">
+      <h3>Web Cache</h3>
+      <div class="muted">
+        Reset the cached WhatsApp Web version. Use if login/ready suddenly stops working after a WhatsApp update.
+        After reset, load a session (or create a new one) to fetch a fresh build.
+      </div>
+      <div style="margin-top:12px;">
+        <button id="btnResetCache">Reset Web Cache</button>
+      </div>
+      <div id="resetCacheStatus" style="margin-top:10px;"></div>
+    </div>
+  </section>
 
-    // tabs
+  <script>
+    const API = "http://127.0.0.1:3000";
+
+    // Tabs
     document.querySelectorAll('.tab').forEach(t => {
       t.addEventListener('click', () => {
         document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
@@ -242,31 +257,30 @@
       });
     });
 
-    const elUnique = {
-      btnGenerate: document.getElementById('btnGenerateUnique'),
-      status: document.getElementById('uniqueStatus'),
-      linkWrap: document.getElementById('uniqueLink')
-    };
-
-    function uniqueMsg(html) { elUnique.status.innerHTML = html; }
-
-    elUnique.btnGenerate.addEventListener('click', async () => {
-      uniqueMsg('Processing...');
-      setButtonLoading(elUnique.btnGenerate, true);
-      try {
-        const res = await postJSON(`${API}/unique-participants`, {});
-        if (res.status === 'success') {
-          uniqueMsg(`<span class="ok">Done! Found ${res.count} unique participants.</span>`);
-          elUnique.linkWrap.innerHTML = `<a href="${API}${res.file}" target="_blank">Download Unique Participants Excel</a>`;
-        } else {
-          uniqueMsg(`<span class="bad">${res.error}</span>`);
-        }
-      } catch (err) {
-        uniqueMsg(`<span class="bad">${err.message}</span>`);
-      } finally {
-        setButtonLoading(elUnique.btnGenerate, false);
+    // Idempotent loader (prevents stuck spinners)
+    function setButtonLoading(btn, loading = true) {
+      if (!btn) return;
+      if (!btn.dataset.label) btn.dataset.label = btn.textContent.trim();
+      if (loading) {
+        if (btn.dataset.loading === '1') return; // already loading
+        btn.dataset.loading = '1';
+        btn.disabled = true;
+        btn.textContent = btn.dataset.label + ' ';
+        const s = document.createElement('span');
+        s.className = 'loader';
+        btn.appendChild(s);
+      } else {
+        btn.dataset.loading = '0';
+        btn.disabled = false;
+        btn.textContent = btn.dataset.label;
       }
-    });
+    }
+
+    async function postJSON(url, body) {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+      return r.json();
+    }
+    async function getJSON(url) { const r = await fetch(url); return r.json(); }
 
     const el = {
       sessionId: document.getElementById('sessionId'),
@@ -279,89 +293,87 @@
       sessionTableBody: document.getElementById('sessionTableBody'),
       btnRefreshResults: document.getElementById('btnRefreshResults'),
       resultsTableBody: document.getElementById('resultsTableBody'),
+      // settings
+      btnResetCache: document.getElementById('btnResetCache'),
+      resetCacheStatus: document.getElementById('resetCacheStatus')
+    };
+
+    const elUnique = {
+      btnGenerate: document.getElementById('btnGenerateUnique'),
+      status: document.getElementById('uniqueStatus'),
+      linkWrap: document.getElementById('uniqueLink')
     };
 
     function msg(html) { el.addStatus.innerHTML = html; }
-
-    // loader helper
-    function setButtonLoading(btn, loading = true) {
-      if (!btn) return;
-      if (loading) {
-        btn.disabled = true;
-        btn.dataset.originalText = btn.innerHTML;
-        btn.innerHTML = btn.innerHTML + ' <span class="loader"></span>';
-      } else {
-        btn.disabled = false;
-        btn.innerHTML = btn.dataset.originalText || btn.innerHTML;
-      }
-    }
-
-    async function postJSON(url, body) {
-      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
-      return r.json();
-    }
-    async function getJSON(url) { const r = await fetch(url); return r.json(); }
+    function uniqueMsg(html) { elUnique.status.innerHTML = html; }
 
     // Create session
-    el.btnCreate.addEventListener('click', async () => {
+    el.btnCreate.addEventListener('click', async function () {
+      if (this.disabled) return;
       const id = el.sessionId.value.trim();
       if (!id) { msg('<span class="bad">Enter a session id.</span>'); return; }
-
-      setButtonLoading(el.btnCreate, true);
+      setButtonLoading(this, true);
       try {
         msg('Creating...');
         const out = await postJSON(`${API}/session/create`, { id });
-        if (out.status === 'created') msg(`<span class="ok">Session "${id}" created. Open QR tab to scan.</span>`);
+        if (out.error) msg(`<span class="bad">${out.error}</span>`);
+        else if (out.status === 'created') msg(`<span class="ok">Session "${id}" created. Open QR tab to scan.</span>`);
         else if (out.status === 'exists') msg(`<span class="ok">Session "${id}" already exists. Status: ${out.isReady ? 'ready' : 'not ready'}</span>`);
         else msg('<span class="bad">Failed to create.</span>');
-      } finally {
-        setButtonLoading(el.btnCreate, false);
-      }
+      } finally { setButtonLoading(this, false); }
     });
 
     // Load existing
-    el.btnLoad.addEventListener('click', async () => {
+    el.btnLoad.addEventListener('click', async function () {
+      if (this.disabled) return;
       const id = el.sessionId.value.trim();
       if (!id) { msg('<span class="bad">Enter a session id.</span>'); return; }
-
-      setButtonLoading(el.btnLoad, true);
+      setButtonLoading(this, true);
       try {
         msg('Loading...');
         const out = await postJSON(`${API}/session/${encodeURIComponent(id)}/init`, {});
-        if (out.status === 'loaded' || out.status === 'already_loaded') {
+        if (out.error) msg(`<span class="bad">${out.error}</span>`);
+        else if (out.status === 'loaded' || out.status === 'already_loaded') {
           msg(`<span class="ok">Session "${id}" loaded. Status: ${out.isReady ? 'ready' : 'initializing...'}</span>`);
         } else msg('<span class="bad">Failed to load session.</span>');
-      } finally {
-        setButtonLoading(el.btnLoad, false);
-      }
+      } finally { setButtonLoading(this, false); }
     });
 
-    // Show QR
-    el.btnShowQr.addEventListener('click', async () => {
+    // Show QR (polling)
+    el.btnShowQr.addEventListener('click', async function () {
+      if (this.disabled) return;
       const id = el.sessionId.value.trim();
       if (!id) { msg('<span class="bad">Enter a session id first.</span>'); return; }
-
-      setButtonLoading(el.btnShowQr, true);
+      setButtonLoading(this, true);
       try {
-        el.qrWrap.innerHTML = 'Polling QR...';
-        const out = await getJSON(`${API}/session/${encodeURIComponent(id)}/qr`);
-        if (out.status === 'authenticated') {
-          el.qrWrap.innerHTML = '<span class="ok">Authenticated ✅</span>';
-        } else if (out.status === 'not_authenticated' && out.qr) {
-          el.qrWrap.innerHTML = `<img class="qr" src="${out.qr}" alt="QR" />`;
-        } else {
-          el.qrWrap.innerHTML = '<span class="muted">QR not ready yet. Try again in a moment.</span>';
-        }
-      } finally {
-        setButtonLoading(el.btnShowQr, false);
-      }
+        el.qrWrap.innerHTML = 'Waiting for QR...';
+        let tries = 0;
+        const maxTries = 90; // ~3 minutes @ 2s
+        const tick = async () => {
+          tries++;
+          const out = await getJSON(`${API}/session/${encodeURIComponent(id)}/qr`);
+          if (out.error) { el.qrWrap.innerHTML = `<span class="bad">${out.error}</span>`; return 'stop'; }
+          if (out.status === 'authenticated') { el.qrWrap.innerHTML = '<span class="ok">Authenticated ✅</span>'; return 'stop'; }
+          if (out.status === 'not_authenticated' && out.qr) {
+            el.qrWrap.innerHTML = `<img class="qr" src="${out.qr}" alt="QR" />`;
+          } else {
+            el.qrWrap.innerHTML = '<span class="muted">QR not ready yet…</span>';
+          }
+          if (tries >= maxTries) { el.qrWrap.innerHTML = '<span class="bad">Timed out waiting for QR. Try again.</span>'; return 'stop'; }
+        };
+        const interval = setInterval(async () => {
+          const s = await tick(); if (s === 'stop') clearInterval(interval);
+        }, 2000);
+        await tick();
+      } finally { setButtonLoading(this, false); }
     });
 
-    // Populate Sessions table
-    async function refreshSessions() {
-      setButtonLoading(el.btnRefresh, true);
+    // Refresh Sessions
+    el.btnRefresh.addEventListener('click', async function () {
+      if (this.disabled) return;
+      setButtonLoading(this, true);
       try {
-        const list = await getJSON(`${API}/sessions`);
+        const list = await getJSON(`${API}/api/sessions`);
         el.sessionTableBody.innerHTML = '';
         for (const s of list) {
           const tr = document.createElement('tr');
@@ -372,55 +384,25 @@
             <td class="row-actions">
               <button data-act="load" data-id="${s.id}">Load</button>
               <button data-act="qr" data-id="${s.id}">QR</button>
-              <button data-act="run" data-id="${s.id}">Run /groups</button>
+              <button data-act="status" data-id="${s.id}">Status</button>
+              <button data-act="run" data-id="${s.id}" ${s.isReady ? '' : 'disabled'}>Run /groups</button>
             </td>
           `;
           el.sessionTableBody.appendChild(tr);
         }
-      } finally {
-        setButtonLoading(el.btnRefresh, false);
-      }
-    }
-
-    el.btnRefresh.addEventListener('click', refreshSessions);
-
-    // Table button events
-    el.sessionTableBody.addEventListener('click', async (e) => {
-      const btn = e.target.closest('button'); if (!btn) return;
-      const id = btn.dataset.id;
-      const act = btn.dataset.act;
-
-      setButtonLoading(btn, true);
-      try {
-        if (act === 'load') {
-          const out = await postJSON(`${API}/session/${encodeURIComponent(id)}/init`, {});
-          alert(`${out.status} (${id})`);
-        }
-        if (act === 'qr') {
-          el.sessionId.value = id;
-          document.querySelector('.tab[data-target="add"]').click();
-        }
-        if (act === 'run') {
-          const out = await postJSON(`${API}/session/${encodeURIComponent(id)}/run-groups`, {});
-          if (out.status === 'success') {
-            alert('Excel generated/overwritten.');
-            await refreshResults();
-          } else alert(out.error || 'Failed to run.');
-        }
-      } finally {
-        setButtonLoading(btn, false);
-      }
+      } finally { setButtonLoading(this, false); }
     });
 
-    // Results table
-    async function refreshResults() {
-      setButtonLoading(el.btnRefreshResults, true);
+    // Refresh Results
+    el.btnRefreshResults.addEventListener('click', async function () {
+      if (this.disabled) return;
+      setButtonLoading(this, true);
       try {
-        const list = await getJSON(`${API}/sessions`);
+        const list = await getJSON(`${API}/api/sessions`);
         el.resultsTableBody.innerHTML = '';
         for (const s of list) {
           const r = await getJSON(`${API}/session/${encodeURIComponent(s.id)}/result`);
-          const link = r.exists ? `<a href="${API}${r.file}" target="_blank">Download Excel</a>` : '<span class="muted">No file</span>';
+          const link = r.exists ? `<a href="${r.file}" target="_blank">Download Excel</a>` : '<span class="muted">No file</span>';
           const tr = document.createElement('tr');
           tr.innerHTML = `
             <td>${s.id}</td>
@@ -431,30 +413,95 @@
           `;
           el.resultsTableBody.appendChild(tr);
         }
-      } finally {
-        setButtonLoading(el.btnRefreshResults, false);
-      }
-    }
+      } finally { setButtonLoading(this, false); }
+    });
 
-    el.btnRefreshResults.addEventListener('click', refreshResults);
-    el.resultsTableBody.addEventListener('click', async (e) => {
-      const btn = e.target.closest('button'); if (!btn) return;
-      const id = btn.dataset.id;
-      setButtonLoading(btn, true);
+    // Unique Participants — Start Process
+    elUnique.btnGenerate.addEventListener('click', async function () {
+      if (this.disabled) return;
+      setButtonLoading(this, true);
+      uniqueMsg('Processing...');
+      elUnique.linkWrap.innerHTML = '';
       try {
-        const out = await postJSON(`${API}/session/${encodeURIComponent(id)}/run-groups`, {});
-        if (out.status === 'success') {
-          alert('Excel generated/overwritten.');
-          await refreshResults();
-        } else alert(out.error || 'Failed to run.');
+        const res = await postJSON(`${API}/unique-participants`, {});
+        if (res.status === 'success') {
+          uniqueMsg(`<span class="ok">Done! Found ${res.count} unique participants across ${res.processedFiles} file(s).</span>`);
+          // Backend returns an ABSOLUTE URL now — use it directly:
+          elUnique.linkWrap.innerHTML = `<a href="${res.file}" target="_blank">Download Unique Participants Excel</a>`;
+        } else {
+          uniqueMsg(`<span class="bad">${res.error || 'Failed to generate unique list.'}</span>`);
+        }
+      } catch (err) {
+        uniqueMsg(`<span class="bad">${err.message}</span>`);
       } finally {
-        setButtonLoading(btn, false);
+        setButtonLoading(this, false);
       }
     });
 
-    // initial loads
-    refreshSessions();
-    refreshResults();
+    // Table button events
+    document.body.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button'); if (!btn) return;
+      if (btn.disabled) return; // guard double clicks
+      const id = btn.dataset.id;
+      const act = btn.dataset.act;
+      if (!act) return;
+      setButtonLoading(btn, true);
+      try {
+        if (act === 'load') {
+          const out = await postJSON(`${API}/session/${encodeURIComponent(id)}/init`, {});
+          if (out.error) alert(out.error);
+          await document.getElementById('btnRefresh').click();
+        }
+        if (act === 'qr') {
+          el.sessionId.value = id;
+          document.querySelector('.tab[data-target="add"]').click();
+        }
+        if (act === 'status') {
+          const r = await getJSON(`${API}/session/${encodeURIComponent(id)}/status`);
+          alert(`${id}: ${r.isReady ? 'ready ✅' : 'not ready ❌'}${r.error ? `\nError: ${r.error}` : ''}`);
+        }
+        if (act === 'run') {
+          const out = await postJSON(`${API}/session/${encodeURIComponent(id)}/run-groups`, {});
+          if (out.status === 'success') alert('Excel generated/overwritten.');
+          else if (out.error) alert(out.error);
+          await document.getElementById('btnRefreshResults').click();
+        }
+      } finally { setButtonLoading(btn, false); }
+    });
+
+    // Settings: Reset Web Cache
+    async function refreshCacheStatus() {
+      try {
+        const r = await getJSON(`${API}/webcache/status`);
+        if (!r.exists) el.resetCacheStatus.innerHTML = `<span class="muted">No cache file found.</span>`;
+        else el.resetCacheStatus.innerHTML = `<span class="muted">Cache exists • ${new Date(r.mtime).toLocaleString()} • ${r.size} bytes</span>`;
+      } catch { /* ignore */ }
+    }
+    document.querySelector('.tab[data-target="settings"]').addEventListener('click', refreshCacheStatus);
+
+    el.btnResetCache.addEventListener('click', async function () {
+      if (this.disabled) return;
+      setButtonLoading(this, true);
+      el.resetCacheStatus.textContent = '';
+      try {
+        const res = await postJSON(`${API}/webcache/reset`, {});
+        if (res.error) el.resetCacheStatus.innerHTML = `<span class="bad">${res.error}</span>`;
+        else el.resetCacheStatus.innerHTML = `<span class="ok">${res.message || 'Cache reset.'}</span>`;
+      } catch (e) {
+        el.resetCacheStatus.innerHTML = `<span class="bad">${e.message}</span>`;
+      } finally { setButtonLoading(this, false); }
+    });
+
+    // Initial load
+    // scrub any stale loaders from previous sessions
+    document.querySelectorAll('button').forEach(b => {
+      b.dataset.label = b.textContent.trim();
+      b.querySelectorAll('.loader').forEach(x => x.remove());
+      b.textContent = b.dataset.label;
+    });
+    (async () => {
+      await Promise.all([document.getElementById('btnRefresh').click(), document.getElementById('btnRefreshResults').click()]);
+    })();
   </script>
 </body>
 

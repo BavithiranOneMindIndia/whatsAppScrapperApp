@@ -1,54 +1,34 @@
-# Node modules
+# Node.js
 node_modules/
-
-# Logs
-logs/
-*.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
 
-# Environment variables
-.env
-.env.local
-.env.*.local
+# VS Code
+.vscode/
+*.code-workspace
 
 # OS files
 .DS_Store
 Thumbs.db
 
-# Electron / cache / build files
-dist/
-out/
-*.asar
-*.zip
-*.exe
-
-# VSCode files
-.vscode/
-.history/
-*.code-workspace
-
-# Sessions & cache
-sessions/
-sessions_auth/
+# Puppeteer / WhatsApp Web.js cache
+.cache/
 .wwebjs_cache/
 
-# NPM package lock (optional, depends on your workflow)
-# package-lock.json
+# WhatsApp session/auth data
+sessions/
+sessions_auth/
 
-# Temporary files
-*.tmp
-*.temp
-*.bak
+# Chrome binaries (shipped manually, too large for git)
+chrome/
 
-# Debug
-.debug/
+# Electron build outputs
+dist/
+out/
+release-builds/
 
-# Yarn
-.yarn/*
-!.yarn/releases
-!.yarn/plugins
-!.yarn/sdks
-!.yarn/versions
-
-# Optional OS specific
-*.swp
+# Logs
+*.log
+logs/
