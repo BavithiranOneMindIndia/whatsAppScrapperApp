@@ -32,3 +32,4 @@ release-builds/
 # Logs
 *.log
 logs/
+*.zip
