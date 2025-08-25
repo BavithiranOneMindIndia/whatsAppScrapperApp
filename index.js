@@ -170,6 +170,33 @@ function createSession(sessionId) {
   }
 }
 
+function sanitizeId(raw) {
+  if (typeof raw !== 'string' || !/^[a-zA-Z0-9._-]{1,64}$/.test(raw)) {
+    const e = new Error("Invalid session id");
+    e.code = "BAD_ID";
+    throw e;
+  }
+  return raw;
+}
+
+function deletePathSafe(p) {
+  try {
+    if (fs.existsSync(p)) {
+      const st = fs.lstatSync(p);
+      if (st.isDirectory()) {
+        fs.rmSync(p, { recursive: true, force: true });
+      } else {
+        fs.unlinkSync(p);
+      }
+      return true;
+    }
+  } catch (e) {
+    console.error("❌ deletePathSafe error:", e);
+  }
+  return false;
+}
+
+
 // --- API Endpoints ---
 
 // Create session
@@ -399,6 +426,95 @@ app.get("/webcache/status", (req, res) => {
   }
 });
 
+
+
+// DELETE session: stop client, delete auth dir and exports dir
+app.delete("/session/:id", async (req, res) => {
+  try {
+    const id = sanitizeId(req.params.id);
+
+    // stop & forget client if running
+    const s = sessions[id];
+    if (s && s.client) {
+      try { s.client.removeAllListeners(); await s.client.destroy(); } catch { }
+    }
+    delete sessions[id];
+
+    const authDir = path.join(AUTH_DIR, `session-${id}`);
+    const exportsDir = path.join(SESSIONS_DIR, id);
+    console.log(`🗑️ Deleting session ${id}:`, { authDir, exportsDir });
+
+    const before = {
+      authDir, exportsDir,
+      authExists: fs.existsSync(authDir),
+      exportsExists: fs.existsSync(exportsDir)
+    };
+
+    const authDeleted = deletePathSafe(authDir);
+    const exportsDeleted = deletePathSafe(exportsDir);
+
+    const after = {
+      authExists: fs.existsSync(authDir),
+      exportsExists: fs.existsSync(exportsDir)
+    };
+
+    res.json({
+      status: "success",
+      id,
+      paths: before,
+      deleted: { authDir: authDeleted, exportsDir: exportsDeleted },
+      after
+    });
+  } catch (e) {
+    const code = e.code === "BAD_ID" ? 400 : 500;
+    res.status(code).json({ error: e.message || "Failed to delete session" });
+  }
+});
+
+// DELETE only the Excel result file
+app.delete("/session/:id/result", (req, res) => {
+  try {
+    const id = sanitizeId(req.params.id);
+    const excelPath = path.join(SESSIONS_DIR, id, "groups_participants.xlsx");
+    console.log(`🗑️ Deleting result file for session ${id}:`, excelPath);
+
+    const before = {
+      excelPath,
+      exists: fs.existsSync(excelPath)
+    };
+
+    const fileDeleted = deletePathSafe(excelPath);
+
+    const after = {
+      exists: fs.existsSync(excelPath)
+    };
+
+    res.json({ status: "success", id, before, fileDeleted, after });
+  } catch (e) {
+    const code = e.code === "BAD_ID" ? 400 : 500;
+    res.status(code).json({ error: e.message || "Failed to delete result" });
+  }
+});
+
+app.get("/session/:id/inspect", (req, res) => {
+  try {
+    const id = sanitizeId(req.params.id);
+    const authDir = path.join(AUTH_DIR, `session-${id}`);
+    const exportsDir = path.join(SESSIONS_DIR, id);
+    const excelPath = path.join(exportsDir, "groups_participants.xlsx");
+
+    res.json({
+      id,
+      authDir, authExists: fs.existsSync(authDir),
+      exportsDir, exportsExists: fs.existsSync(exportsDir),
+      excelPath, excelExists: fs.existsSync(excelPath)
+    });
+  } catch (e) {
+    const code = e.code === "BAD_ID" ? 400 : 500;
+    res.status(code).json({ error: e.message || "Inspect failed" });
+  }
+});
+
 // Static files AFTER API
 app.use("/sessions", express.static(SESSIONS_DIR));
 
@@ -406,6 +522,8 @@ app.use("/sessions", express.static(SESSIONS_DIR));
 app.use((req, res) => {
   res.status(404).json({ error: "Not found", path: req.path });
 });
+
+
 
 // Start server
 const server = app.listen(PORT, '127.0.0.1', () => {

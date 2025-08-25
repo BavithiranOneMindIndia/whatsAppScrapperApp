@@ -386,6 +386,7 @@
               <button data-act="qr" data-id="${s.id}">QR</button>
               <button data-act="status" data-id="${s.id}">Status</button>
               <button data-act="run" data-id="${s.id}" ${s.isReady ? '' : 'disabled'}>Run /groups</button>
+              <button data-act="delete-session" data-id="${s.id}">Delete</button>
             </td>
           `;
           el.sessionTableBody.appendChild(tr);
@@ -409,6 +410,7 @@
             <td>${link}</td>
             <td class="row-actions">
               <button data-act="run" data-id="${s.id}">Run /groups</button>
+              <button data-act="delete-result" data-id="${s.id}" ${r.exists ? '' : 'disabled'}>Delete Result</button>
             </td>
           `;
           el.resultsTableBody.appendChild(tr);
@@ -464,6 +466,30 @@
           const out = await postJSON(`${API}/session/${encodeURIComponent(id)}/run-groups`, {});
           if (out.status === 'success') alert('Excel generated/overwritten.');
           else if (out.error) alert(out.error);
+          await document.getElementById('btnRefreshResults').click();
+        }
+        if (act === 'delete-session') {
+          if (!confirm(`Delete session "${id}"?\nThis removes its login (auth) and all exported files.`)) {
+            setButtonLoading(btn, false); return;
+          }
+          const res = await fetch(`${API}/session/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          const out = await res.json().catch(() => ({}));
+          if (out.error) alert(out.error);
+          else alert(`Session "${id}" deleted.${out.deleted ? `\nAuth: ${out.deleted.authDir ? '✔' : '✖'}\nExports: ${out.deleted.exportsDir ? '✔' : '✖'}` : ''}`);
+          await Promise.all([
+            document.getElementById('btnRefresh').click(),
+            document.getElementById('btnRefreshResults').click()
+          ]);
+        }
+
+        if (act === 'delete-result') {
+          if (!confirm(`Delete Excel result for session "${id}"?`)) {
+            setButtonLoading(btn, false); return;
+          }
+          const res = await fetch(`${API}/session/${encodeURIComponent(id)}/result`, { method: 'DELETE' });
+          const out = await res.json().catch(() => ({}));
+          if (out.error) alert(out.error);
+          else alert(`Result for "${id}" ${out.fileDeleted ? 'deleted' : 'not found'}.`);
           await document.getElementById('btnRefreshResults').click();
         }
       } finally { setButtonLoading(btn, false); }
